@@ -15,6 +15,8 @@ export class FeishuBotService implements OnModuleInit {
 
   // 缓存每个用户的会话 ID，避免每次查库
   private sessionCache: Map<string, string> = new Map();
+  private connected = false;
+  private lastConnectedAt: string | null = null;
 
   constructor(private readonly chatService: ChatService) {}
 
@@ -52,10 +54,24 @@ export class FeishuBotService implements OnModuleInit {
         appSecret,
         loggerLevel: lark.LoggerLevel.info,
         autoReconnect: true,
-        onReady: () => this.logger.log('飞书 WebSocket 长连接已就绪'),
-        onError: (err: Error) => this.logger.error('飞书 WebSocket 错误', err.message),
-        onReconnecting: () => this.logger.warn('飞书 WebSocket 正在重连...'),
-        onReconnected: () => this.logger.log('飞书 WebSocket 重连成功'),
+        onReady: () => {
+          this.connected = true;
+          this.lastConnectedAt = new Date().toISOString();
+          this.logger.log('飞书 WebSocket 长连接已就绪');
+        },
+        onError: (err: Error) => {
+          this.connected = false;
+          this.logger.error('飞书 WebSocket 错误', err.message);
+        },
+        onReconnecting: () => {
+          this.connected = false;
+          this.logger.warn('飞书 WebSocket 正在重连...');
+        },
+        onReconnected: () => {
+          this.connected = true;
+          this.lastConnectedAt = new Date().toISOString();
+          this.logger.log('飞书 WebSocket 重连成功');
+        },
       });
 
       await this.wsClient.start({ eventDispatcher });
@@ -344,5 +360,13 @@ export class FeishuBotService implements OnModuleInit {
     this.accessToken = data.tenant_access_token;
     this.tokenExpiresAt = Date.now() + (data.expire - 300) * 1000;
     return this.accessToken!;
+  }
+
+  // ==================== 状态查询 ====================
+  getStatus() {
+    return {
+      connected: this.connected,
+      lastConnectedAt: this.lastConnectedAt,
+    };
   }
 }
