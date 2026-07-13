@@ -9,6 +9,7 @@ import { TaskModule } from './modules/task/task.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
+import { FeishuCallbackModule } from './modules/feishu-callback/feishu-callback.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReminderModule } from './modules/reminder/reminder.module';
     ChatModule,
     KnowledgeModule,
     ReminderModule,
+    FeishuCallbackModule,
     // ====== @route-section: business-modules END ======
 
     // ⚠️ @route-order: last
