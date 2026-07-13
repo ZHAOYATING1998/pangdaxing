@@ -15,8 +15,13 @@ export class ReminderScheduler implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log('启动提醒调度器，每60秒检查一次');
-    this.intervalId = setInterval(() => this.checkReminders(), 60000);
-    this.checkReminders(); // 启动时立即检查一次
+    this.intervalId = setInterval(() => {
+      this.checkReminders().catch((err) => this.logger.error('调度器执行失败', err));
+    }, 60000);
+    // 延迟10秒再首次检查，避免启动时DB未就绪
+    setTimeout(() => {
+      this.checkReminders().catch((err) => this.logger.error('首次检查失败', err));
+    }, 10000);
   }
 
   async checkReminders() {
