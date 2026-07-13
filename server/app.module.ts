@@ -10,6 +10,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
 import { FeishuCallbackModule } from './modules/feishu-callback/feishu-callback.module';
+import { FeishuBotModule } from './modules/feishu-bot/feishu-bot.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FeishuCallbackModule } from './modules/feishu-callback/feishu-callback.
     KnowledgeModule,
     ReminderModule,
     FeishuCallbackModule,
+    FeishuBotModule,
     // ====== @route-section: business-modules END ======
 
     // ⚠️ @route-order: last
