@@ -1,103 +1,114 @@
-import { logger } from '@lark-apaas/client-toolkit/logger';
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
+// 胖大星 API 客户端 — Vercel 部署版
+// 不依赖妙搭平台 SDK，直接用 fetch 调用后端 API
+
+const API_BASE = ''; // 同域部署
+
+async function request<T = any>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${url}`, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+
+  // 204 No Content
+  if (res.status === 204) return undefined as any;
+
+  return res.json();
+}
+
+const logger = {
+  info: (...args: any[]) => console.log('[INFO]', ...args),
+  warn: (...args: any[]) => console.warn('[WARN]', ...args),
+  error: (...args: any[]) => console.error('[ERROR]', ...args),
+  debug: (...args: any[]) => console.debug('[DEBUG]', ...args),
+};
 
 // ==================== 健康数据 API ====================
 export async function getHealthStats() {
-  const { data } = await axiosForBackend({ url: '/api/health/stats', method: 'GET' });
-  return data;
+  return request('/api/health/stats');
 }
 
 export async function getWeightRecords(days = 30) {
-  const { data } = await axiosForBackend({ url: `/api/health/weight?days=${days}`, method: 'GET' });
-  return data;
+  return request(`/api/health/weight?days=${days}`);
 }
 
 export async function addWeightRecord(record: { weight: number; recordDate: string; bodyFat?: number; waist?: number; notes?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/health/weight', method: 'POST', data: record });
-  return data;
+  return request('/api/health/weight', { method: 'POST', body: JSON.stringify(record) });
 }
 
 export async function getDietRecords(date?: string) {
   const params = date ? `?date=${date}` : '';
-  const { data } = await axiosForBackend({ url: `/api/health/diet${params}`, method: 'GET' });
-  return data;
+  return request(`/api/health/diet${params}`);
 }
 
 export async function addDietRecord(record: { recordDate: string; mealType: string; foodName: string; calories?: number; portion?: string; notes?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/health/diet', method: 'POST', data: record });
-  return data;
+  return request('/api/health/diet', { method: 'POST', body: JSON.stringify(record) });
 }
 
 export async function getExerciseRecords(days = 30) {
-  const { data } = await axiosForBackend({ url: `/api/health/exercise?days=${days}`, method: 'GET' });
-  return data;
+  return request(`/api/health/exercise?days=${days}`);
 }
 
 export async function addExerciseRecord(record: { recordDate: string; exerciseType: string; duration?: number; caloriesBurned?: number; intensity?: string; notes?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/health/exercise', method: 'POST', data: record });
-  return data;
+  return request('/api/health/exercise', { method: 'POST', body: JSON.stringify(record) });
 }
 
 export async function getGoals() {
-  const { data } = await axiosForBackend({ url: '/api/health/goals', method: 'GET' });
-  return data;
+  return request('/api/health/goals');
 }
 
 export async function setGoal(goal: { targetWeight: number; startWeight: number; startDate: string; targetDate?: string; dailyCalorieTarget?: number; weeklyExerciseTarget?: number; notes?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/health/goals', method: 'POST', data: goal });
-  return data;
+  return request('/api/health/goals', { method: 'POST', body: JSON.stringify(goal) });
 }
 
 // ==================== 任务 API ====================
 export async function getTasks() {
-  const { data } = await axiosForBackend({ url: '/api/tasks', method: 'GET' });
-  return data;
+  return request('/api/tasks');
 }
 
 export async function createTask(task: { title: string; description?: string; category?: string; icon?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/tasks', method: 'POST', data: task });
-  return data;
+  return request('/api/tasks', { method: 'POST', body: JSON.stringify(task) });
 }
 
 export async function getTodayCompletions() {
-  const { data } = await axiosForBackend({ url: '/api/tasks/completions', method: 'GET' });
-  return data;
+  return request('/api/tasks/completions');
 }
 
 export async function completeTask(taskId: string) {
-  const { data } = await axiosForBackend({ url: `/api/tasks/${taskId}/complete`, method: 'POST' });
-  return data;
+  return request(`/api/tasks/${taskId}/complete`, { method: 'POST' });
 }
 
 export async function uncompleteTask(taskId: string) {
-  const { data } = await axiosForBackend({ url: `/api/tasks/${taskId}/complete`, method: 'DELETE' });
-  return data;
+  return request(`/api/tasks/${taskId}/complete`, { method: 'DELETE' });
 }
 
 export async function getWeeklyTaskStats() {
-  const { data } = await axiosForBackend({ url: '/api/tasks/stats/weekly', method: 'GET' });
-  return data;
+  return request('/api/tasks/stats/weekly');
 }
 
 // ==================== 聊天 API ====================
 export async function getChatSessions() {
-  const { data } = await axiosForBackend({ url: '/api/chat/sessions', method: 'GET' });
-  return data;
+  return request('/api/chat/sessions');
 }
 
 export async function createChatSession(title?: string) {
-  const { data } = await axiosForBackend({ url: '/api/chat/sessions', method: 'POST', data: { title } });
-  return data;
+  return request('/api/chat/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
 export async function getChatMessages(sessionId: string) {
-  const { data } = await axiosForBackend({ url: `/api/chat/sessions/${sessionId}/messages`, method: 'GET' });
-  return data;
+  return request(`/api/chat/sessions/${sessionId}/messages`);
 }
 
 export async function sendChatMessage(sessionId: string, message: string) {
-  const { data } = await axiosForBackend({ url: '/api/chat/send', method: 'POST', data: { sessionId, message } });
-  return data;
+  return request('/api/chat/send', { method: 'POST', body: JSON.stringify({ sessionId, message }) });
 }
 
 // ==================== 知识库 API ====================
@@ -106,42 +117,36 @@ export async function getKnowledgeDocs(category?: string, keyword?: string) {
   if (category) params.set('category', category);
   if (keyword) params.set('keyword', keyword);
   const query = params.toString() ? `?${params.toString()}` : '';
-  const { data } = await axiosForBackend({ url: `/api/knowledge${query}`, method: 'GET' });
-  return data;
+  return request(`/api/knowledge${query}`);
 }
 
 export async function createKnowledgeDoc(doc: { title: string; category?: string; content: string; source?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/knowledge', method: 'POST', data: doc });
-  return data;
+  return request('/api/knowledge', { method: 'POST', body: JSON.stringify(doc) });
 }
 
 export async function updateKnowledgeDoc(id: string, doc: Partial<{ title: string; category: string; content: string; isPinned: boolean }>) {
-  const { data } = await axiosForBackend({ url: `/api/knowledge/${id}`, method: 'PUT', data: doc });
-  return data;
+  return request(`/api/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(doc) });
 }
 
 export async function deleteKnowledgeDoc(id: string) {
-  const { data } = await axiosForBackend({ url: `/api/knowledge/${id}`, method: 'DELETE' });
-  return data;
+  return request(`/api/knowledge/${id}`, { method: 'DELETE' });
 }
 
 // ==================== 提醒 API ====================
 export async function getReminders() {
-  const { data } = await axiosForBackend({ url: '/api/reminders', method: 'GET' });
-  return data;
+  return request('/api/reminders');
 }
 
 export async function createReminder(reminder: { name: string; reminderTime: string; message: string; daysOfWeek?: string }) {
-  const { data } = await axiosForBackend({ url: '/api/reminders', method: 'POST', data: reminder });
-  return data;
+  return request('/api/reminders', { method: 'POST', body: JSON.stringify(reminder) });
 }
 
 export async function updateReminder(id: string, reminder: Partial<{ name: string; reminderTime: string; message: string; daysOfWeek: string; isActive: boolean }>) {
-  const { data } = await axiosForBackend({ url: `/api/reminders/${id}`, method: 'PUT', data: reminder });
-  return data;
+  return request(`/api/reminders/${id}`, { method: 'PUT', body: JSON.stringify(reminder) });
 }
 
 export async function deleteReminder(id: string) {
-  const { data } = await axiosForBackend({ url: `/api/reminders/${id}`, method: 'DELETE' });
-  return data;
+  return request(`/api/reminders/${id}`, { method: 'DELETE' });
 }
+
+export { logger };
