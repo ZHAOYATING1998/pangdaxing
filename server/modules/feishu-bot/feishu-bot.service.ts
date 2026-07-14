@@ -1,13 +1,15 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import * as lark from '@larksuiteoapi/node-sdk';
 import axios from 'axios';
 import { ChatService } from '../chat/chat.service';
 
 const RECENT_COUNT = 20; // 最近 20 条原文保留
 const SUMMARY_TRIGGER = 30; // 超过 30 条时才生成摘要
+const HEALTH_CHECK_INTERVAL = 30000; // 30秒心跳检测
+const MAX_RECONNECT_ATTEMPTS = 10; // 最大重连次数
 
 @Injectable()
-export class FeishuBotService implements OnModuleInit {
+export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(FeishuBotService.name);
   private wsClient: lark.WSClient | null = null;
   private accessToken: string | null = null;
@@ -17,6 +19,9 @@ export class FeishuBotService implements OnModuleInit {
   private sessionCache: Map<string, string> = new Map();
   private connected = false;
   private lastConnectedAt: string | null = null;
+  private healthCheckTimer: NodeJS.Timeout | null = null;
+  private reconnectAttempts = 0;
+  private isDestroyed = false;
 
   constructor(private readonly chatService: ChatService) {}
 
@@ -25,16 +30,38 @@ export class FeishuBotService implements OnModuleInit {
     const appSecret = process.env.FEISHU_APP_SECRET;
 
     if (!appId || !appSecret) {
+      console.warn('[FEISHU BOT] FEISHU_APP_ID / FEISHU_APP_SECRET 未配置，飞书 Bot 不启动');
       this.logger.warn('FEISHU_APP_ID / FEISHU_APP_SECRET 未配置，飞书 Bot 不启动');
       return;
     }
 
+    console.log('[FEISHU BOT] 模块初始化，3秒后启动 WebSocket...');
+    this.logger.log('飞书 Bot 模块初始化，3秒后启动 WebSocket...');
     setTimeout(() => this.startWebSocket(), 3000);
   }
 
+  onModuleDestroy() {
+    this.isDestroyed = true;
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+    if (this.wsClient) {
+      this.logger.log('正在关闭飞书 WebSocket 连接...');
+      this.wsClient.close({ force: true });
+      this.wsClient = null;
+    }
+  }
+
   private async startWebSocket() {
+    if (this.isDestroyed) return;
+
     const appId = process.env.FEISHU_APP_ID!;
     const appSecret = process.env.FEISHU_APP_SECRET!;
+
+    this.reconnectAttempts++;
+    console.log(`[FEISHU BOT] 启动 WebSocket (尝试 #${this.reconnectAttempts})...`);
+    this.logger.log(`启动飞书 WebSocket (尝试 #${this.reconnectAttempts})...`);
 
     try {
       const eventDispatcher = new lark.EventDispatcher({
@@ -44,6 +71,7 @@ export class FeishuBotService implements OnModuleInit {
           try {
             await this.handleMessage(data);
           } catch (err) {
+            console.error('[FEISHU BOT] 处理消息时出错:', err);
             this.logger.error('处理消息时出错', err);
           }
         },
@@ -56,43 +84,77 @@ export class FeishuBotService implements OnModuleInit {
         autoReconnect: true,
         onReady: () => {
           this.connected = true;
+          this.reconnectAttempts = 0;
           this.lastConnectedAt = new Date().toISOString();
+          console.log('[FEISHU BOT] WebSocket 长连接已就绪');
           this.logger.log('飞书 WebSocket 长连接已就绪');
         },
         onError: (err: Error) => {
           this.connected = false;
+          console.error('[FEISHU BOT] WebSocket 错误:', err.message);
           this.logger.error('飞书 WebSocket 错误', err.message);
         },
         onReconnecting: () => {
           this.connected = false;
+          console.warn('[FEISHU BOT] WebSocket 正在重连...');
           this.logger.warn('飞书 WebSocket 正在重连...');
         },
         onReconnected: () => {
           this.connected = true;
+          this.reconnectAttempts = 0;
           this.lastConnectedAt = new Date().toISOString();
+          console.log('[FEISHU BOT] WebSocket 重连成功');
           this.logger.log('飞书 WebSocket 重连成功');
         },
       });
 
       await this.wsClient.start({ eventDispatcher });
+      console.log('[FEISHU BOT] 长连接已启动');
       this.logger.log('飞书 Bot 长连接已启动');
+      this.startHealthCheck();
     } catch (err: any) {
+      console.error('[FEISHU BOT] 启动 WebSocket 失败:', err?.message || err);
       this.logger.error('启动飞书 WebSocket 失败', err?.message || err);
-      setTimeout(() => this.startWebSocket(), 30000);
+      if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(this.reconnectAttempts * 5000, 60000);
+        console.log(`[FEISHU BOT] ${delay / 1000}秒后尝试重连...`);
+        this.logger.log(`${delay / 1000}秒后尝试重连...`);
+        setTimeout(() => this.startWebSocket(), delay);
+      } else {
+        console.error('[FEISHU BOT] 达到最大重连次数，停止自动重连');
+        this.logger.error('达到最大重连次数，停止自动重连');
+      }
     }
+  }
+
+  private startHealthCheck() {
+    if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+    this.healthCheckTimer = setInterval(() => {
+      if (!this.isDestroyed && !this.connected) {
+        this.logger.warn('心跳检测发现连接断开，尝试重新启动...');
+        this.startWebSocket();
+      }
+    }, HEALTH_CHECK_INTERVAL);
+    this.logger.log('心跳检测已启动 (每30秒)');
   }
 
   // ==================== 消息处理 ====================
   private async handleMessage(data: any) {
     const msgType = data?.message?.message_type;
     const messageId = data?.message?.message_id;
-    const chatId = data?.message?.chat_id;
     const chatType = data?.message?.chat_type;
     const senderOpenId = data?.sender?.sender_id?.open_id;
 
-    this.logger.log(`收到消息: type=${msgType}, from=${senderOpenId}`);
+    console.log(`[FEISHU BOT] 收到消息: type=${msgType}, from=${senderOpenId}, chatType=${chatType}`);
+    this.logger.log(`收到消息: type=${msgType}, from=${senderOpenId}, chatType=${chatType}, msgId=${messageId?.substring(0, 20)}...`);
+
+    if (!senderOpenId) {
+      this.logger.warn('消息缺少 sender open_id，忽略');
+      return;
+    }
 
     if (msgType !== 'text') {
+      this.logger.log(`非文本消息，回复提示: ${msgType}`);
       await this.replyText(messageId, '我现在只能处理文字消息哦~请发文字给我吧！');
       return;
     }
@@ -108,43 +170,69 @@ export class FeishuBotService implements OnModuleInit {
     if (chatType === 'group') {
       const mentions = data.message.mentions || [];
       const mentioned = mentions.some((m: any) => m.name === '胖大星' || m.id?.open_id);
-      if (!mentioned) return;
+      if (!mentioned) {
+        this.logger.log('群聊中未被@，忽略消息');
+        return;
+      }
       text = text.replace(/@胖大星\s*/g, '').trim();
     }
 
     if (!text) {
+      this.logger.log('空文本消息，回复提示');
       await this.replyText(messageId, '说点什么吧，我在听呢~');
       return;
     }
 
-    // ---------- 核心：拿到会话 ID，保存消息，构建记忆上下文 ----------
-    const sessionId = await this.getOrCreateSession(senderOpenId);
+    this.logger.log(`处理用户消息: "${text.substring(0, 50)}..."`);
 
-    // 保存用户消息到数据库
-    await this.chatService.sendMessage({
-      sessionId,
-      role: 'user',
-      content: text,
-      userProfile: senderOpenId,
-    });
+    try {
+      // ---------- 拿到会话 ID，保存消息，构建记忆上下文 ----------
+      console.log('[FEISHU BOT] 处理用户消息:', text.slice(0, 50));
+      const sessionId = await this.getOrCreateSession(senderOpenId);
+      console.log('[FEISHU BOT] 会话 ID:', sessionId.slice(0, 16));
 
-    // 构建记忆上下文（方案 C：近期 20 条原文 + 更早的摘要）
-    const memoryContext = await this.buildMemoryContext(sessionId);
+      // 保存用户消息到数据库
+      await this.chatService.sendMessage({
+        sessionId,
+        role: 'user',
+        content: text,
+        userProfile: senderOpenId,
+      });
+      console.log('[FEISHU BOT] 用户消息已保存');
 
-    // 调 AI 生成回复
-    const aiReply = await this.callAI(text, memoryContext);
-    this.logger.log(`AI 回复 (${senderOpenId}): "${aiReply.substring(0, 80)}"`);
+      // 构建记忆上下文（方案 C：近期 20 条原文 + 更早的摘要）
+      const memoryContext = await this.buildMemoryContext(sessionId);
+      console.log(`[FEISHU BOT] 记忆上下文: history=${memoryContext.history.length}, summary=${memoryContext.summary ? '有' : '无'}`);
 
-    // 保存 AI 回复到数据库
-    await this.chatService.sendMessage({
-      sessionId,
-      role: 'assistant',
-      content: aiReply,
-      userProfile: senderOpenId,
-    });
+      // 调 AI 生成回复
+      console.log('[FEISHU BOT] 开始调用 AI...');
+      const aiReply = await this.callAI(text, memoryContext);
+      console.log(`[FEISHU BOT] AI 回复: "${aiReply.substring(0, 80)}..."`);
 
-    // 回复飞书
-    await this.replyText(messageId, aiReply);
+      // 保存 AI 回复到数据库
+      await this.chatService.sendMessage({
+        sessionId,
+        role: 'assistant',
+        content: aiReply,
+        userProfile: senderOpenId,
+      });
+      console.log('[FEISHU BOT] AI 回复已保存');
+
+      // 回复飞书
+      console.log('[FEISHU BOT] 发送飞书回复...');
+      await this.replyText(messageId, aiReply);
+      console.log('[FEISHU BOT] 飞书回复发送成功');
+    } catch (err: any) {
+      console.error('[FEISHU BOT] 消息处理失败:', err?.message || err);
+      this.logger.error(`消息处理失败: ${err?.message || err}`);
+      // 尝试发送错误提示
+      try {
+        await this.replyText(messageId, '哎呀，我脑子突然短路了，再发一次试试~');
+      } catch (replyErr) {
+        console.error('[FEISHU BOT] 发送错误提示也失败了:', replyErr);
+        this.logger.error('发送错误提示也失败了', replyErr);
+      }
+    }
   }
 
   // ==================== 方案 C：记忆上下文构建 ====================
@@ -367,6 +455,10 @@ export class FeishuBotService implements OnModuleInit {
     return {
       connected: this.connected,
       lastConnectedAt: this.lastConnectedAt,
+      reconnectAttempts: this.reconnectAttempts,
+      wsClientExists: !!this.wsClient,
+      healthCheckActive: !!this.healthCheckTimer,
+      timestamp: new Date().toISOString(),
     };
   }
 }

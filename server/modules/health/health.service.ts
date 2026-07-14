@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { DRIZZLE_DATABASE, PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, PostgresJsDatabase } from '@server/database';
 import { healthRecords, dietRecords, exerciseRecords, userGoals } from '@server/database/schema';
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 

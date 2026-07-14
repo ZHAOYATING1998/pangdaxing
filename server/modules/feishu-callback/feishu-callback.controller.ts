@@ -2,7 +2,7 @@ import { Controller, Post, Body, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { FeishuService } from '@server/common/feishu.service';
 
-@Controller('api/feishu')
+@Controller('webhook/feishu')
 export class FeishuCallbackController {
   private readonly logger = new Logger(FeishuCallbackController.name);
   // 存储每个用户的最近聊天历史
@@ -12,12 +12,12 @@ export class FeishuCallbackController {
 
   @Post('callback')
   async callback(@Body() body: any) {
-    this.logger.log(`飞书回调: type=${body?.type}, event_type=${body?.event?.type}, header=${JSON.stringify(body?.header)}`);
+    console.log('[FEISHU CALLBACK] received body:', JSON.stringify(body).slice(0, 500));
 
     // URL 验证：飞书配置回调地址时会发 challenge
     if (body?.type === 'url_verification') {
       const challenge = body?.challenge || body?.token;
-      this.logger.log(`URL验证: challenge=${challenge}`);
+      console.log('[FEISHU CALLBACK] URL verification challenge:', challenge);
       return { challenge };
     }
 
@@ -30,11 +30,11 @@ export class FeishuCallbackController {
       if (message?.message_type === 'text' && event?.sender?.sender_id?.open_id) {
         const senderId = event.sender.sender_id.open_id;
         const content = JSON.parse(message.content || '{}').text || '';
-        this.logger.log(`收到消息: sender=${senderId}, text=${content}`);
+        console.log(`[FEISHU CALLBACK] msg from ${senderId}: ${content.slice(0, 100)}`);
 
         // 异步回复，不阻塞回调响应
         this.replyWithAI(senderId, content).catch((err) =>
-          this.logger.error('AI回复失败', err),
+          console.error('[FEISHU CALLBACK] AI reply failed:', err),
         );
       }
     }
@@ -66,11 +66,12 @@ export class FeishuCallbackController {
     ];
 
     try {
+      console.log('[FEISHU CALLBACK] Calling AI for:', userMessage.slice(0, 50));
       const { data } = await axios.post(
         aiApiUrl,
         {
           model: aiModel,
-          messages,
+          messages: [...messages, { role: 'user', content: userMessage }],
           max_tokens: 600,
           temperature: 0.7,
         },
@@ -84,6 +85,7 @@ export class FeishuCallbackController {
       );
 
       const reply = data.choices?.[0]?.message?.content || '嗯嗯，这个问题我需要想想~';
+      console.log('[FEISHU CALLBACK] AI reply:', reply.slice(0, 100));
 
       // 保存历史
       history.push({ role: 'user', content: userMessage });
@@ -93,9 +95,9 @@ export class FeishuCallbackController {
 
       // 发送回复
       await this.feishuService.sendMessage(openId, reply);
-      this.logger.log(`AI回复已发送给 ${openId}`);
+      console.log(`[FEISHU CALLBACK] Reply sent to ${openId}`);
     } catch (error: any) {
-      this.logger.error('AI调用失败', error.message);
+      console.error('[FEISHU CALLBACK] AI call failed:', error.message);
       await this.feishuService.sendMessage(
         openId,
         '哎呀，我脑子卡了一下😵 再说一遍试试？',

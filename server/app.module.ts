@@ -1,9 +1,9 @@
 import { APP_FILTER } from '@nestjs/core';
 import { Module } from '@nestjs/common';
-import { PlatformModule } from '@lark-apaas/fullstack-nestjs-core';
+import { DatabaseModule } from '@server/database';
 
 import { GlobalExceptionFilter } from './common/filters/exception.filter';
-import { ViewModule } from './modules/view/view.module';
+import { HelloModule } from './modules/hello/hello.module';
 import { HealthModule } from './modules/health/health.module';
 import { TaskModule } from './modules/task/task.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -14,9 +14,10 @@ import { FeishuBotModule } from './modules/feishu-bot/feishu-bot.module';
 
 @Module({
   imports: [
-    // 平台 Module，提供平台能力
-    PlatformModule.forRoot(),
-    // ====== @route-section: business-modules START ======
+    // 数据库（全局模块，替换妙搭平台依赖）
+    DatabaseModule,
+    // ====== 业务模块 ======
+    HelloModule,
     HealthModule,
     TaskModule,
     ChatModule,
@@ -24,11 +25,6 @@ import { FeishuBotModule } from './modules/feishu-bot/feishu-bot.module';
     ReminderModule,
     FeishuCallbackModule,
     FeishuBotModule,
-    // ====== @route-section: business-modules END ======
-
-    // ⚠️ @route-order: last
-    // ViewModule is the fallback route module, must be registered last.
-    ViewModule,
   ],
   providers: [
     {

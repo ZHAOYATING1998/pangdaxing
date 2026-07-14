@@ -7,30 +7,30 @@ export class TaskController {
 
   @Get()
   async getTasks(@Req() req: any) {
-    return this.taskService.getTasks(req.user.user_id);
+    return this.taskService.getTasks(req.user?.user_id || 'unknown');
   }
 
   @Post()
   async createTask(@Req() req: any, @Body() body: any) {
     return this.taskService.createTask({
       ...body,
-      userProfile: req.user.user_id,
+      userProfile: req.user?.user_id || 'unknown',
     });
   }
 
   @Put(':id')
   async updateTask(@Req() req: any, @Param('id') id: string, @Body() body: any) {
-    return this.taskService.updateTask(id, req.user.user_id, body);
+    return this.taskService.updateTask(id, req.user?.user_id || 'unknown', body);
   }
 
   @Delete(':id')
   async deleteTask(@Req() req: any, @Param('id') id: string) {
-    return this.taskService.deleteTask(id, req.user.user_id);
+    return this.taskService.deleteTask(id, req.user?.user_id || 'unknown');
   }
 
   @Get('completions')
   async getTodayCompletions(@Req() req: any) {
-    return this.taskService.getTodayCompletions(req.user.user_id);
+    return this.taskService.getTodayCompletions(req.user?.user_id || 'unknown');
   }
 
   @Post(':taskId/complete')
@@ -39,17 +39,17 @@ export class TaskController {
       taskId,
       completedDate: new Date(),
       notes: body?.notes,
-      userProfile: req.user.user_id,
+      userProfile: req.user?.user_id || 'unknown',
     });
   }
 
   @Delete(':taskId/complete')
   async uncompleteTask(@Req() req: any, @Param('taskId') taskId: string) {
-    return this.taskService.uncompleteTask(taskId, req.user.user_id);
+    return this.taskService.uncompleteTask(taskId, req.user?.user_id || 'unknown');
   }
 
   @Get('stats/weekly')
   async getWeeklyStats(@Req() req: any) {
-    return this.taskService.getWeeklyStats(req.user.user_id);
+    return this.taskService.getWeeklyStats(req.user?.user_id || 'unknown');
   }
 }

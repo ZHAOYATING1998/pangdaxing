@@ -7,17 +7,20 @@ export class ChatController {
 
   @Get('sessions')
   async getSessions(@Req() req: any) {
-    return this.chatService.getSessions(req.user.user_id);
+    const userId = req.user?.user_id || 'unknown';
+    return this.chatService.getSessions(userId);
   }
 
   @Post('sessions')
   async createSession(@Req() req: any, @Body() body: any) {
-    return this.chatService.createSession(req.user.user_id, body?.title);
+    const userId = req.user?.user_id || 'unknown';
+    return this.chatService.createSession(userId, body?.title);
   }
 
   @Delete('sessions/:id')
   async deleteSession(@Req() req: any, @Param('id') id: string) {
-    return this.chatService.deleteSession(id, req.user.user_id);
+    const userId = req.user?.user_id || 'unknown';
+    return this.chatService.deleteSession(id, userId);
   }
 
   @Get('sessions/:sessionId/messages')
@@ -27,6 +30,7 @@ export class ChatController {
 
   @Post('send')
   async sendMessage(@Req() req: any, @Body() body: { sessionId: string; message: string }) {
-    return this.chatService.chat(req.user.user_id, body.sessionId, body.message);
+    const userId = req.user?.user_id || 'unknown';
+    return this.chatService.chat(userId, body.sessionId, body.message);
   }
 }

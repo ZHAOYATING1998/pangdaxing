@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { DRIZZLE_DATABASE, PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, PostgresJsDatabase } from '@server/database';
 import { chatSessions, chatMessages } from '@server/database/schema';
 import { eq, and, desc, asc } from 'drizzle-orm';
 import axios from 'axios';

@@ -1,31 +1,40 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
-import { configureApp } from '@lark-apaas/fullstack-nestjs-core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import express from 'express';
 import { join } from 'path';
-import { __express as hbsExpressEngine } from 'hbs';
-
-import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    abortOnError: process.env.NODE_ENV !== 'development',
+    abortOnError: false,
   });
-  await configureApp(app, { 
-    disableSwagger: true,
-  });
+
   const logger = new Logger('Bootstrap');
-  const host = process.env.SERVER_HOST || 'localhost';
-  const port = Number(process.env.SERVER_PORT || '3000');
 
-  // 注册视图引擎, 渲染 client 目录下的 html 文件
-  app.setBaseViewsDir(join(process.cwd(), 'dist/client'));
-  app.setViewEngine('html');
-  app.engine('html', hbsExpressEngine);
+  app.enableCors({ origin: true, credentials: true });
+  app.use(express.json({ limit: '10mb' }));
 
-  await app.listen(port, host);
-  logger.log(`Server running on ${host}:${port}`);
-  logger.log(`API endpoints ready at http://${host}:${port}/api`);
+  // 静态文件 & SPA fallback（独立运行时使用；Vercel 中由 vercel.json rewrites 处理）
+  const clientDir = join(process.cwd(), 'public');
+  app.use(express.static(clientDir, { maxAge: '1d', index: false }));
+
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/webhook') && !req.path.includes('.')) {
+      return res.sendFile(join(clientDir, 'index.html'));
+    }
+    next();
+  });
+
+  const port = parseInt(process.env.PORT || '3000', 10);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`胖大星运行在 http://0.0.0.0:${port}`);
 }
 
-bootstrap();
+// 独立运行时启动（npm start / node dist/server/main.js）
+// Vercel 环境通过 api/index.ts 导入 AppModule，不会执行这段
+if (!process.env.VERCEL) {
+  bootstrap();
+}
+
+export { AppModule };
